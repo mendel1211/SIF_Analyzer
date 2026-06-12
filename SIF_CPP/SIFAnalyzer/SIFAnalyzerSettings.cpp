@@ -1,9 +1,8 @@
 #include "SIFAnalyzerSettings.h"
-#include "SIFAnalyzer.h"
 #include <AnalyzerHelpers.h>
 
 SIFAnalyzerSettings::SIFAnalyzerSettings()
-    : mSyncThresholdTosc(SYNC_THRESHOLD_TOSC)
+    : mSyncThresholdTosc(992)  // 默认 992 Tosc (旧单位), 实际用时序阈值
 {
     mChannelInterface.reset(new AnalyzerSettingInterfaceChannel());
     mChannelInterface->SetTitleAndTooltip("SIF Signal", "SIF single-wire signal");

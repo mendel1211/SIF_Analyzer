@@ -11,22 +11,21 @@ class SIFAnalyzerSettings;
 class SIFAnalyzer;
 
 // ---------------------------------------------------------------------------
-// 协议常量（Tosc 单位）
+// 协议常量（对齐 MCU sif.c 实现）
 // ---------------------------------------------------------------------------
-const U32 SYNC_THRESHOLD_TOSC = 992;
-const U32 SHORT_PULSE_TOSC = 32;
-const U32 LONG_PULSE_TOSC = 64;
-const double RATIO_THRESHOLD = 1.2;
-const double SYNC_MIN_SEC = 0.030;
+const double SYNC_LOW_MIN_SEC  = 0.008;  // 同步低电平 ≥ 8ms (MCU 10ms, 留余量)
+const double END_SIGNAL_SEC    = 0.002;  // 帧结束信号 ≥ 2ms
+const double SYNC_H_MIN_SEC    = 0.0003; // 同步高电平最小 ~0.3ms
+const double SYNC_H_MAX_SEC    = 0.003;  // 同步高电平最大 ~3ms (放宽)
 
 // ---------------------------------------------------------------------------
-// 分析器状态
+// 分析器状态 (对齐 MCU: INITIAL→SYNC_L→SYNC_H→DATA)
 // ---------------------------------------------------------------------------
 enum SIFState
 {
-    SIF_STATE_SEEK_SYNC,
-    SIF_STATE_CALIBRATE,
-    SIF_STATE_DATA
+    SIF_STATE_SEEK_SYNC,   // INITIAL: 等待同步低电平
+    SIF_STATE_SYNC_H,      // SYNC_L→SYNC_H: 验证同步高电平
+    SIF_STATE_DATA         // DATA_RX: 解码数据
 };
 
 // ---------------------------------------------------------------------------
@@ -58,31 +57,25 @@ protected:
 
     // 状态
     SIFState  mState;
-    double    mTosc;          // 检测到的 Tosc（秒）
 
-    U64       mSampleRateHz;  // 采样率
-    U64       mEdgeSample;    // 当前沿的采样号
-    BitState  mPrevBitState;  // 前一个电平
+    U64       mSampleRateHz;
+    U64       mEdgeSample;
+    BitState  mPrevBitState;
 
     // 字节缓冲
-    U8        mByteVal;       // 当前字节值
-    U32       mBitCount;      // 已收集位数
+    U8        mByteVal;
+    U32       mBitCount;
     U64       mByteStartSample;
 
     // 脉冲缓冲
-    U64       mPulse1Width;   // 第一个脉冲宽度（采样数）
-    BitState  mPulse1Level;   // 第一个脉冲电平
+    U64       mPulse1Width;
+    BitState  mPulse1Level;
     bool      mHasPulse1;
     U64       mPulseStartSample;
 
-    // 辅助方法
+    // 辅助
     double    SamplesToSec(U64 samples) const;
-    U64       SecToSamples(double sec) const;
-    bool      IsSync(U64 low_samples);
-    SIFState  SeekSync(U64 low_samples);
-    SIFState  Calibrate(U64 pulse_samples, BitState level);
-    int       DecodeBit(U64 high_samples, U64 low_samples);
-    void      EmitByte(U64 start_sample, U64 end_sample);
+    int       DecodeBit(U64 high_s, U64 low_s);
 
 #pragma warning(pop)
 };

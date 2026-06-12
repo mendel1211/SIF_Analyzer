@@ -1,6 +1,9 @@
 #include "SIFSimulationDataGenerator.h"
 #include "SIFAnalyzerSettings.h"
-#include "SIFAnalyzer.h"
+
+// Tosc 时序: 32Tosc≈500us, 64Tosc≈1000us (模拟使用)
+static const U32 SHORT_PULSE_US = 500;
+static const U32 LONG_PULSE_US  = 1000;
 
 SIFSimulationDataGenerator::SIFSimulationDataGenerator()
     : mSettings(nullptr)
@@ -34,20 +37,19 @@ U32 SIFSimulationDataGenerator::GenerateSimulationData(
 
     // Tosc 换算: 默认 32Tosc = 500us → Tosc = 15.625us
     double tosc_us = 15.625;
-    U32 tosc_samples = U32(tosc_us * 1e-6 * sample_rate);
-    U32 short_pulse = SHORT_PULSE_TOSC * tosc_samples;
-    U32 long_pulse  = LONG_PULSE_TOSC * tosc_samples;
+    U32 short_samp = U32(SHORT_PULSE_US * 1e-6 * sample_rate);
+    U32 long_samp  = U32(LONG_PULSE_US * 1e-6 * sample_rate);
 
-    // --- 同步脉冲 (低电平 ~31ms) ---
-    U32 sync_samples = U32(0.031 * sample_rate);
+    // --- 同步脉冲 (低电平 ~10ms) ---
+    U32 sync_samples = U32(0.010 * sample_rate);
     for (U32 i = 0; i < sync_samples && samples < newest_sample_requested; i++)
         mSIFSimData.TransitionIfNeeded(BIT_LOW);
     samples += sync_samples;
 
-    // --- 短校准脉冲 (高电平 32Tosc) ---
-    for (U32 i = 0; i < short_pulse && samples < newest_sample_requested; i++)
+    // --- 同步高 (短脉冲 32Tosc≈500us) ---
+    for (U32 i = 0; i < short_samp && samples < newest_sample_requested; i++)
         mSIFSimData.TransitionIfNeeded(BIT_HIGH);
-    samples += short_pulse;
+    samples += short_samp;
 
     // --- 数据: "Hello" = 01001000 01100101 ... ---
     const char* message = "Hello";
@@ -57,7 +59,7 @@ U32 SIFSimulationDataGenerator::GenerateSimulationData(
         for (int b = 7; b >= 0; b--)
         {
             bool bit = (byte_val >> b) & 1;
-            CreateSIFBit(mSIFSimData, samples, bit, short_pulse, long_pulse);
+            CreateSIFBit(mSIFSimData, samples, bit, short_samp, long_samp);
             if (samples >= newest_sample_requested)
                 break;
         }
