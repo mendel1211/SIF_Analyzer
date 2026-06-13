@@ -20,9 +20,6 @@ SIFAnalyzer::SIFAnalyzer()
     , mByteVal(0)
     , mBitCount(0)
     , mByteStartSample(0)
-    , mPulse1Width(0)
-    , mPulse1Level(BIT_LOW)
-    , mHasPulse1(false)
     , mPulseStartSample(0)
 {
     SetAnalyzerSettings(mSettings.get());
@@ -75,6 +72,7 @@ void SIFAnalyzer::WorkerThread()
     mSIFChannel = GetAnalyzerChannelData(mSettings->mSIFChannel);
 
     mState = SIF_STATE_SEEK_SYNC;
+    mTosc = 0.0;
     mEdgeSample = 0;
     mPrevBitState = mSIFChannel->GetBitState();
     mHasPulse1 = false;
@@ -100,95 +98,84 @@ void SIFAnalyzer::WorkerThread()
 
         double dur = SamplesToSec(pulse_samples);
 
+        // 毛刺过滤: < 80µs 忽略 (MCU 有边沿去抖)
+        if (dur < MIN_PULSE_SEC)
+            continue;
+
         switch (mState)
         {
-        // ---- SEEK_SYNC: 等待低电平 ≥ 8ms ----
+        // ---- SEEK_SYNC: 长低 → 同步 ----
         case SIF_STATE_SEEK_SYNC:
+            if (level == BIT_LOW && dur >= SYNC_LOW_MIN_SEC)
+                mState = SIF_STATE_SYNC_H;
+            break;
+
+        // ---- SYNC_H: 高脉冲 → 测 Tosc → 数据开始 ----
+        case SIF_STATE_SYNC_H:
+            if (level == BIT_HIGH && dur >= 0.0001 && dur < 0.005)
+            {
+                mTosc = dur / double(TOSC_UNITS_SHORT);
+                mState = SIF_STATE_DATA;
+                mHasPulse1 = false;
+                mByteVal = 0; mBitCount = 0;
+                printf("[SIF] Tosc=%.1f us -> DATA\n", ToscSec() * 1e6);
+            }
+            break;
+
+        // ---- DATA: 一低一高=1bit, 8bit=1byte ----
+        case SIF_STATE_DATA:
+        {
+            // 新同步
             if (level == BIT_LOW && dur >= SYNC_LOW_MIN_SEC)
             {
                 mState = SIF_STATE_SYNC_H;
-                mPulseStartSample = mEdgeSample;
-
-                printf("[SIF] SYNC low=%.1f ms\n", dur * 1000.0);
-
-                // 输出 SYNC 帧
-                U64 sync_start = mEdgeSample - pulse_samples;
-                Frame frame;
-                frame.mStartingSampleInclusive = sync_start;
-                frame.mEndingSampleInclusive = mEdgeSample;
-                frame.mType = SIF_RESULT_SYNC;
-                frame.mData1 = (U64)(dur * 10000.0);  // 0.1ms 单位
-                mResults->AddFrame(frame);
-
-                mResults->CommitPacketAndStartNewPacket();
+                mHasPulse1 = false;
+                mByteVal = 0; mBitCount = 0;
+                printf("[SIF] SYNC detected in DATA\n");
+                break;
             }
-            break;
-
-        // ---- SYNC_H: 验证同步高电平 → 进入数据区 ----
-        case SIF_STATE_SYNC_H:
-            if (level == BIT_HIGH && dur >= SYNC_H_MIN_SEC)
+            // 帧结束 (MCU: 低≥2ms + 字节边界 + 无pending脉冲)
+            if (level == BIT_LOW && dur >= END_SIGNAL_SEC
+                && mBitCount == 0 && !mHasPulse1)
             {
-                // 同步高结束(检测到低电平)，进入数据接收
-                mState = SIF_STATE_DATA;
-                mHasPulse1 = true;
-                mPulse1Width = pulse_samples;
-                mPulse1Level = level;    // 当前是低电平↓ (数据首脉冲)
-                mPulseStartSample = mEdgeSample;
-                mByteVal = 0;
-                mBitCount = 0;
-                printf("[SIF] SYNC high=%.1f ms, enter DATA\n", dur * 1000.0);
+                mState = SIF_STATE_SEEK_SYNC;
+                break;
             }
-            break;
 
-        // ---- DATA: 解码数据位 ----
-        case SIF_STATE_DATA:
             if (mHasPulse1)
             {
-                U64 high_s, low_s;
-                if (mPulse1Level == BIT_HIGH)
-                { high_s = mPulse1Width; low_s = pulse_samples; }
-                else
-                { high_s = pulse_samples; low_s = mPulse1Width; }
+                // 第二个脉冲(高) → bit完整, 判位: 高长→1, 低长→0
+                double low_ms  = SamplesToSec(mPulse1Width) * 1000.0;
+                double high_ms = dur * 1000.0;
+                int bit = (high_ms > low_ms) ? 1 : 0;
 
-                int bit = DecodeBit(high_s, low_s);
-                if (bit >= 0)
+                if (mBitCount == 0)
+                    mByteStartSample = mPulseStartSample;
+                mByteVal = (mByteVal << 1) | U8(bit);
+                mBitCount++;
+
+                if (mBitCount >= 8)
                 {
-                    if (mBitCount == 0)
-                        mByteStartSample = mPulseStartSample;
-                    mByteVal = (mByteVal << 1) | U8(bit);
-                    mBitCount++;
-
-                    if (mBitCount >= 8)
-                    {
-                        printf("[SIF] Byte: 0x%02X\n", mByteVal);
-                        Frame frame;
-                        frame.mStartingSampleInclusive = mByteStartSample;
-                        frame.mEndingSampleInclusive = mEdgeSample;
-                        frame.mType = SIF_RESULT_BYTE;
-                        frame.mData1 = mByteVal;
-                        mResults->AddFrame(frame);
-                        mByteVal = 0;
-                        mBitCount = 0;
-                    }
+                    printf("[SIF] 0x%02X\n", mByteVal);
+                    Frame f;
+                    f.mStartingSampleInclusive = mByteStartSample;
+                    f.mEndingSampleInclusive = mEdgeSample;
+                    f.mType = SIF_RESULT_BYTE; f.mData1 = mByteVal;
+                    mResults->AddFrame(f);
+                    mByteVal = 0; mBitCount = 0;
                 }
                 mHasPulse1 = false;
             }
             else
             {
+                // 第一个脉冲(低) → 暂存
                 mHasPulse1 = true;
                 mPulse1Width = pulse_samples;
-                mPulse1Level = level;
-                mPulseStartSample = mEdgeSample;
-            }
-
-            // 帧结束检测: 低电平 ≥ 2ms, 且在字节边界
-            if (level == BIT_LOW && dur >= END_SIGNAL_SEC && mBitCount == 0 && !mHasPulse1)
-            {
-                printf("[SIF] Frame end (low=%.1f ms)\n", dur * 1000.0);
-                mState = SIF_STATE_SEEK_SYNC;
+                mPulseStartSample = mEdgeSample - pulse_samples;
             }
             break;
         }
+        }  // end switch (mState)
 
         ReportProgress(mEdgeSample);
         CheckIfThreadShouldExit();
@@ -201,17 +188,6 @@ void SIFAnalyzer::WorkerThread()
 double SIFAnalyzer::SamplesToSec(U64 samples) const
 {
     return double(samples) / double(mSampleRateHz);
-}
-
-// ---------------------------------------------------------------------------
-// 判位: 对齐 MCU —— 直接比较长短，高更长→1，否则→0
-// ---------------------------------------------------------------------------
-int SIFAnalyzer::DecodeBit(U64 high_s, U64 low_s)
-{
-    if (high_s > low_s)
-        return 1;
-    else
-        return 0;
 }
 
 // ---------------------------------------------------------------------------

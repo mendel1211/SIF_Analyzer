@@ -11,21 +11,21 @@ class SIFAnalyzerSettings;
 class SIFAnalyzer;
 
 // ---------------------------------------------------------------------------
-// 协议常量（对齐 MCU sif.c 实现）
+// 协议常量 (MD 协议摘要 + MCU 帧结束)
 // ---------------------------------------------------------------------------
-const double SYNC_LOW_MIN_SEC  = 0.008;  // 同步低电平 ≥ 8ms (MCU 10ms, 留余量)
-const double END_SIGNAL_SEC    = 0.002;  // 帧结束信号 ≥ 2ms
-const double SYNC_H_MIN_SEC    = 0.0003; // 同步高电平最小 ~0.3ms
-const double SYNC_H_MAX_SEC    = 0.003;  // 同步高电平最大 ~3ms (放宽)
+const double SYNC_LOW_MIN_SEC  = 0.008;   // 同步低 ≥ 8ms
+const double END_SIGNAL_SEC    = 0.002;   // 帧结束 ≥ 2ms (MCU)
+const double MIN_PULSE_SEC     = 0.00008; // 最小有效脉冲 80µs (过滤毛刺)
+const U32   TOSC_UNITS_SHORT   = 32;      // 短脉冲 Tosc 单位
 
 // ---------------------------------------------------------------------------
-// 分析器状态 (对齐 MCU: INITIAL→SYNC_L→SYNC_H→DATA)
+// 状态机
 // ---------------------------------------------------------------------------
 enum SIFState
 {
-    SIF_STATE_SEEK_SYNC,   // INITIAL: 等待同步低电平
-    SIF_STATE_SYNC_H,      // SYNC_L→SYNC_H: 验证同步高电平
-    SIF_STATE_DATA         // DATA_RX: 解码数据
+    SIF_STATE_SEEK_SYNC,
+    SIF_STATE_SYNC_H,
+    SIF_STATE_DATA
 };
 
 // ---------------------------------------------------------------------------
@@ -57,6 +57,7 @@ protected:
 
     // 状态
     SIFState  mState;
+    double    mTosc;           // 同步高测得的 Tosc (秒), 0=未测
 
     U64       mSampleRateHz;
     U64       mEdgeSample;
@@ -67,15 +68,14 @@ protected:
     U32       mBitCount;
     U64       mByteStartSample;
 
-    // 脉冲缓冲
+    // 脉冲缓冲 — 一低一高 = 1 bit
     U64       mPulse1Width;
-    BitState  mPulse1Level;
     bool      mHasPulse1;
     U64       mPulseStartSample;
 
     // 辅助
     double    SamplesToSec(U64 samples) const;
-    int       DecodeBit(U64 high_s, U64 low_s);
+    double    ToscSec() const { return (mTosc > 0.0) ? mTosc : 15.625e-6; }
 
 #pragma warning(pop)
 };

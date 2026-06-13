@@ -1,62 +1,59 @@
 # SIF Protocol Analyzer for Saleae Logic 2
 
-基于 SIF (Single Inline Frame) 单线通信协议的 **C++ Protocol Analyzer**。
+基于 SIF (Single Inline Frame) 单线通信协议的 C++ Protocol Analyzer。
+直接选择数字通道，无需桥接分析器。
 
 ## 🚀 安装
 
-```
-1. Logic 2 → Settings → Custom Low Level Analyzers
-2. 选择目录: SIF_CPP\build\SIFAnalyzer\Release\
-3. 重启 Logic 2
-4. Analyzers → + → "SIF Protocol" → 直接选通道
-```
+1. Logic 2 → Settings → 滑到底部 **Custom Low Level Analyzers**
+2. Browse 选择 `SIF_CPP\build\SIFAnalyzer\Release\`
+3. 保存 → 重启 Logic 2
+4. Analyzers → ＋ → 搜索 **SIF Protocol** → 选择数字通道
 
 ## 🔨 编译
 
+**前提**: Visual Studio 2022 + CMake
+
 ```
-cd SIF_CPP && build.bat   (需要 VS 2022)
+cd SIF_CPP
+build.bat
 ```
+
+脚本自动从本地 Logic 2 的 `Analyzer.dll` 生成 import library。
+
+## 📊 功能
+
+- ✅ 直接选择数字通道
+- ✅ 同步识别 (长低 + 短高, 自动 Tosc)
+- ✅ 数据解析 (一低一高 = 1 bit, H>L→1)
+- ✅ 字节组装 (8 bit → 0xNN)
+- ✅ 帧结束检测 (低 ≥ 2ms + 字节边界)
+- ✅ 毛刺过滤 (< 80µs 忽略)
+- ✅ CSV 导出
 
 ## 📁 结构
 
 ```
 SIF_CPP/
-├── build.bat              # 编译脚本
-├── CMakeLists.txt          # 根 CMake
-├── AnalyzerSDK/            # Saleae SDK 头文件 + import lib
+├── build.bat                   # 一键编译
+├── CMakeLists.txt
+├── AnalyzerSDK/                 # 头文件 + import lib
 └── SIFAnalyzer/
-    ├── SIFAnalyzer.cpp     # 核心：同步识别 → Tosc测量 → 1.2倍判位
-    ├── SIFAnalyzer.h
-    ├── SIFAnalyzerSettings.cpp/h  # 通道选择 + 参数
-    ├── SIFAnalyzerResults.cpp/h   # 气泡显示 + CSV导出
-    └── SIFSimulationDataGenerator.cpp/h  # 模拟数据
+    ├── SIFAnalyzer.cpp/h        # 核心状态机
+    ├── SIFAnalyzerSettings.cpp/h
+    ├── SIFAnalyzerResults.cpp/h
+    └── SIFSimulationDataGenerator.cpp/h
 ```
 
-## 📊 协议
+## 📖 协议
 
 详见 [SIF_protocol_summary.md](SIF_protocol_summary.md)
 
-## 文件说明
+## ⚠️ 注意
 
-| 文件 | 说明 |
-|------|------|
-| **SIFHLA.py** | ⭐ 核心分析器（HLA） |
-| **extension.json** | Saleae 扩展配置 |
-| DigitalMeasurement.py | Range Measurement 版本（备用） |
-| ProtocolAnalyzer.py | 高级解码器框架 |
-| Config.py | 参数配置管理 |
-| Verify.py | 独立验证脚本 |
-
----
-
-## 协议详情
-
-详见 [SIF_protocol_summary.md](SIF_protocol_summary.md)
-|------|------|------|
-| Sync Signal Detected | SYNC | 是否检测到同步信号 |
-| Tosc (Timing Unit) | Tosc | 测量到的基准时间单位 |
-| Decoded Bit Stream | BITS | 解码的比特流和字节值 |
-| Bit Errors | ERR | 检测到的位错误数量 |
+- 采样率建议 ≥ 1 MHz
+- 首次编译需 Logic 2 已安装（提取 SDK 符号）
+- 更新 Logic 2 后建议重新编译
 
 ## 使用方法
 

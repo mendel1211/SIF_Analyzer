@@ -31,14 +31,9 @@ void SIFAnalyzerResults::GenerateBubbleText(U64 frame_index,
     }
     else if (frame.mType == SIF_RESULT_BYTE)
     {
-        std::stringstream ss;
-        ss << "0x" << std::uppercase << std::hex << U32(frame.mData1);
-        AddResultString(ss.str().c_str());
-
-        ss.str("");
-        ss << "0x" << std::uppercase << std::hex << U32(frame.mData1)
-           << "  (" << std::dec << U32(frame.mData1) << ")";
-        AddResultString(ss.str().c_str());
+        char s[8];
+        sprintf_s(s, "0x%02X", U32(frame.mData1));
+        AddResultString(s);
     }
 }
 
@@ -102,8 +97,8 @@ void SIFAnalyzerResults::GenerateFrameTabularText(U64 frame_index,
     }
     else if (frame.mType == SIF_RESULT_BYTE)
     {
-        std::stringstream ss;
-        ss << "0x" << std::uppercase << std::hex << U32(frame.mData1);
-        AddTabularText(ss.str().c_str());
+        char s[8];
+        sprintf_s(s, "0x%02X", U32(frame.mData1));
+        AddTabularText(s);
     }
 }
