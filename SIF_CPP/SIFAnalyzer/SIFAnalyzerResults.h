@@ -6,7 +6,11 @@
 enum SIFResultType
 {
     SIF_RESULT_SYNC,
-    SIF_RESULT_BYTE
+    SIF_RESULT_BYTE,
+    SIF_RESULT_TLV_TAG,
+    SIF_RESULT_TLV_LEN,
+    SIF_RESULT_TLV_CRC,
+    SIF_RESULT_TLV_CRCERR
 };
 
 class SIFAnalyzer;

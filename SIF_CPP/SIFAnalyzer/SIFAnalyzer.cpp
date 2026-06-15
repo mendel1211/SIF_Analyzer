@@ -78,6 +78,7 @@ void SIFAnalyzer::WorkerThread()
     mHasPulse1 = false;
     mByteVal = 0;
     mBitCount = 0;
+    mTailgPos = 0; mTailgSkip = 0; mTailgTotal = 0; mTailgSum = 0; mTailgNextIsLen = false;
 
     mSIFChannel->AdvanceToNextEdge();
     mEdgeSample = mSIFChannel->GetSampleNumber();
@@ -118,6 +119,7 @@ void SIFAnalyzer::WorkerThread()
                 mState = SIF_STATE_DATA;
                 mHasPulse1 = false;
                 mByteVal = 0; mBitCount = 0;
+                mTailgPos = 0; mTailgSkip = 0; mTailgTotal = 0; mTailgSum = 0; mTailgNextIsLen = false;
                 printf("[SIF] Tosc=%.1f us -> DATA\n", ToscSec() * 1e6);
             }
             break;
@@ -131,14 +133,15 @@ void SIFAnalyzer::WorkerThread()
                 mState = SIF_STATE_SYNC_H;
                 mHasPulse1 = false;
                 mByteVal = 0; mBitCount = 0;
-                printf("[SIF] SYNC detected in DATA\n");
+                mTailgPos = 0; mTailgSkip = 0; mTailgTotal = 0; mTailgSum = 0; mTailgNextIsLen = false;
                 break;
             }
-            // 帧结束 (MCU: 低≥2ms + 字节边界 + 无pending脉冲)
+            // 帧结束
             if (level == BIT_LOW && dur >= END_SIGNAL_SEC
                 && mBitCount == 0 && !mHasPulse1)
             {
                 mState = SIF_STATE_SEEK_SYNC;
+                mTailgPos = 0; mTailgSkip = 0; mTailgTotal = 0; mTailgSum = 0; mTailgNextIsLen = false;
                 break;
             }
 
@@ -156,11 +159,49 @@ void SIFAnalyzer::WorkerThread()
 
                 if (mBitCount >= 8)
                 {
-                    printf("[SIF] 0x%02X\n", mByteVal);
+                    U8  ftype = SIF_RESULT_BYTE;
+
+                    // TAILG: D0+01+总长+TLV+CRC. CRC位置=总长+3
+                    if (mSettings->mProjectIndex == 1)
+                    {
+                        if (mTailgPos == 0 && mByteVal == 0xD0)
+                            { mTailgSum = mByteVal; }
+                        else if (mTailgPos == 1 && mByteVal == 0x01)
+                            { mTailgSum += mByteVal; }
+                        else if (mTailgPos == 2)
+                            { mTailgTotal = 4 + mByteVal; mTailgSum += mByteVal; }
+                        else if (mTailgPos >= 3)
+                        {
+                            if (mTailgPos + 1 == mTailgTotal)
+                            {
+                                // CRC: 校验 SUM(D0..CRC前)
+                                U8 sum8 = U8(mTailgSum & 0xFF);
+                                if (sum8 == mByteVal)
+                                    { ftype = SIF_RESULT_TLV_CRC; }
+                                else
+                                    { ftype = SIF_RESULT_TLV_CRCERR; }
+                                mTailgSum = sum8;  // 暂存期望值供 Frame 使用
+                            }
+                            else
+                            {
+                                mTailgSum += mByteVal;
+                                if (mTailgSkip > 0)
+                                    { mTailgSkip--; if (mTailgSkip == 0) mTailgNextIsLen = false; }
+                                else if (!mTailgNextIsLen)
+                                    { ftype = SIF_RESULT_TLV_TAG; mTailgNextIsLen = true; }
+                                else
+                                    { mTailgSkip = mByteVal; ftype = SIF_RESULT_TLV_LEN; mTailgNextIsLen = false; }
+                            }
+                        }
+                        mTailgPos++;
+                    }
+
                     Frame f;
                     f.mStartingSampleInclusive = mByteStartSample;
                     f.mEndingSampleInclusive = mEdgeSample;
-                    f.mType = SIF_RESULT_BYTE; f.mData1 = mByteVal;
+                    f.mType = ftype; f.mData1 = mByteVal;
+                    if (ftype == SIF_RESULT_TLV_CRC || ftype == SIF_RESULT_TLV_CRCERR)
+                        f.mData2 = mTailgSum;  // 期望的 SUM 校验值
                     mResults->AddFrame(f);
                     mByteVal = 0; mBitCount = 0;
                 }

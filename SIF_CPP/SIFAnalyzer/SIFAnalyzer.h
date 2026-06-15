@@ -73,6 +73,13 @@ protected:
     bool      mHasPulse1;
     U64       mPulseStartSample;
 
+    // TAILG 二层解析
+    U32       mTailgPos;
+    U32       mTailgSkip;
+    U32       mTailgTotal;
+    U32       mTailgSum;
+    bool      mTailgNextIsLen;
+
     // 辅助
     double    SamplesToSec(U64 samples) const;
     double    ToscSec() const { return (mTosc > 0.0) ? mTosc : 15.625e-6; }

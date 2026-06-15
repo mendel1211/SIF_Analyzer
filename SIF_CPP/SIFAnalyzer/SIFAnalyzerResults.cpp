@@ -35,6 +35,30 @@ void SIFAnalyzerResults::GenerateBubbleText(U64 frame_index,
         sprintf_s(s, "0x%02X", U32(frame.mData1));
         AddResultString(s);
     }
+    else if (frame.mType == SIF_RESULT_TLV_TAG)
+    {
+        char s[16];
+        sprintf_s(s, "TAG 0x%02X", U32(frame.mData1));
+        AddResultString(s);
+    }
+    else if (frame.mType == SIF_RESULT_TLV_LEN)
+    {
+        char s[16];
+        sprintf_s(s, "LEN=%llu", frame.mData1);
+        AddResultString(s);
+    }
+    else if (frame.mType == SIF_RESULT_TLV_CRC)
+    {
+        char s[16];
+        sprintf_s(s, "SUMCRC 0x%02X", U32(frame.mData1));
+        AddResultString(s);
+    }
+    else if (frame.mType == SIF_RESULT_TLV_CRCERR)
+    {
+        char s[32];
+        sprintf_s(s, "CRCERR 0x%02X(exp 0x%02X)", U32(frame.mData1), U32(frame.mData2));
+        AddResultString(s);
+    }
 }
 
 void SIFAnalyzerResults::GenerateExportFile(const char* file,
@@ -99,6 +123,30 @@ void SIFAnalyzerResults::GenerateFrameTabularText(U64 frame_index,
     {
         char s[8];
         sprintf_s(s, "0x%02X", U32(frame.mData1));
+        AddTabularText(s);
+    }
+    else if (frame.mType == SIF_RESULT_TLV_TAG)
+    {
+        char s[16];
+        sprintf_s(s, "TAG 0x%02X", U32(frame.mData1));
+        AddTabularText(s);
+    }
+    else if (frame.mType == SIF_RESULT_TLV_LEN)
+    {
+        char s[16];
+        sprintf_s(s, "LEN=%llu", frame.mData1);
+        AddTabularText(s);
+    }
+    else if (frame.mType == SIF_RESULT_TLV_CRC)
+    {
+        char s[16];
+        sprintf_s(s, "SUMCRC 0x%02X", U32(frame.mData1));
+        AddTabularText(s);
+    }
+    else if (frame.mType == SIF_RESULT_TLV_CRCERR)
+    {
+        char s[32];
+        sprintf_s(s, "CRCERR 0x%02X(exp 0x%02X)", U32(frame.mData1), U32(frame.mData2));
         AddTabularText(s);
     }
 }

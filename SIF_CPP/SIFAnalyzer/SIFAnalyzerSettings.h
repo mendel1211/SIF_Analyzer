@@ -17,11 +17,13 @@ public:
     void UpdateInterfacesFromSettings();
 
     Channel mSIFChannel;
-    U32     mSyncThresholdTosc;  // 同步阈值（Tosc 单位）
+    U32     mSyncThresholdTosc;
+    U32     mProjectIndex;     // 0=Raw, 1=TAILG
 
 protected:
-    std::unique_ptr<AnalyzerSettingInterfaceChannel> mChannelInterface;
-    std::unique_ptr<AnalyzerSettingInterfaceInteger> mSyncThresholdInterface;
+    std::unique_ptr<AnalyzerSettingInterfaceChannel>    mChannelInterface;
+    std::unique_ptr<AnalyzerSettingInterfaceInteger>    mSyncThresholdInterface;
+    std::unique_ptr<AnalyzerSettingInterfaceNumberList> mProjectInterface;
 };
 
 #endif

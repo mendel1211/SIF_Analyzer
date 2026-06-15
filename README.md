@@ -23,99 +23,64 @@ build.bat
 
 ## 📊 功能
 
+### 物理层解析
 - ✅ 直接选择数字通道
-- ✅ 同步识别 (长低 + 短高, 自动 Tosc)
-- ✅ 数据解析 (一低一高 = 1 bit, H>L→1)
-- ✅ 字节组装 (8 bit → 0xNN)
-- ✅ 帧结束检测 (低 ≥ 2ms + 字节边界)
-- ✅ 毛刺过滤 (< 80µs 忽略)
+- ✅ 同步识别 — 长低电平(≥8ms) + 短高脉冲(~32Tosc)
+- ✅ 自动 Tosc 测量 — 从同步高脉宽推算时钟基准
+- ✅ 数据位解码 — 一低一高 = 1 bit, 高长于低 → 1, 低长于高 → 0
+- ✅ 字节组装 — 8 bit → 0xNN (MSB first)
+- ✅ 帧结束检测 — 低电平 ≥ 2ms + 字节边界对齐
+- ✅ 毛刺过滤 — < 80µs 脉冲忽略
 - ✅ CSV 导出
+
+### TAILG 二层解析
+- ✅ Project 下拉选择 Raw / TAILG 模式
+- ✅ 帧头识别 — D0 01 前缀自动定位 TLV 包
+- ✅ TAG/LEN 配对 — 交替标注每个 TLV 的 Tag 和 Length
+- ✅ 变长数据跳过 — 根据 LEN 自动跳过 N 字节
+- ✅ SUMCRC 校验 — D0 起逐字节累加，取低 8 位与 CRC 比对
+- ✅ 校验结果 — 正确显示 `SUMCRC 0xNN`，错误显示 `CRCERR 0xNN(exp 0xYY)`
+
+### 气泡标注 (TAILG 模式)
+| 类型 | 显示 | 颜色 |
+|------|------|------|
+| Sync | `SYNC 10.0 ms` | 绿 |
+| Raw Byte | `0xNN` | 白 |
+| TAG | `TAG 0xNN` | 青 |
+| LEN | `LEN=N` | 黄 |
+| CRC 正确 | `SUMCRC 0xNN` | 绿 |
+| CRC 错误 | `CRCERR 0xNN(exp 0xYY)` | 红 |
 
 ## 📁 结构
 
 ```
 SIF_CPP/
-├── build.bat                   # 一键编译
+├── build.bat                     # 一键编译
 ├── CMakeLists.txt
-├── AnalyzerSDK/                 # 头文件 + import lib
+├── AnalyzerSDK/                   # SDK 头文件 + 自动生成的 import lib
 └── SIFAnalyzer/
-    ├── SIFAnalyzer.cpp/h        # 核心状态机
-    ├── SIFAnalyzerSettings.cpp/h
-    ├── SIFAnalyzerResults.cpp/h
+    ├── SIFAnalyzer.cpp/h          # 核心状态机 + TAILG + SUMCRC
+    ├── SIFAnalyzerSettings.cpp/h   # 通道/阈值/Project 设置
+    ├── SIFAnalyzerResults.cpp/h   # 气泡/表格/导出
     └── SIFSimulationDataGenerator.cpp/h
 ```
 
-## 📖 协议
+## ⚙️ 设置项
 
-详见 [SIF_protocol_summary.md](SIF_protocol_summary.md)
+| 设置 | 说明 |
+|------|------|
+| **SIF Signal** | 选择信号通道 |
+| **Sync Threshold (Tosc)** | 同步脉冲最小宽度 (默认 992 Tosc) |
+| **Project** | Raw = 仅字节解析 / TAILG = D0+01+TLV+SUMCRC |
 
 ## ⚠️ 注意
 
 - 采样率建议 ≥ 1 MHz
-- 首次编译需 Logic 2 已安装（提取 SDK 符号）
+- 首次编译需 Logic 2 已安装 (提取 Analyzer.dll 符号)
 - 更新 Logic 2 后建议重新编译
+- 编译前请关闭 Logic 2 (否则 DLL 被占用)
 
-## 使用方法
-
-### 安装
-1. 在 Saleae Logic 中，进入 **Options > Extensions**
-2. 点击 **Add Extension**
-3. 选择此项目的根目录
-
-### 配置
-1. 打开逻辑分析仪并采集 SIF 协议信号
-2. 创建新的**数字测量**
-3. 选择 **SIF Protocol Analyzer**
-4. 分析器会自动进行：
-   - 同步信号检测
-   - Tosc 测量
-   - 数据位解析
-
-## 协议规范参考
-
-### 帧结构
-```
-[同步脉冲: >992Tosc] 
-→ [校准间隔: >32Tosc]
-→ [数据位 1-N]
-```
-
-### 脉冲编码（以 32Tosc=500µs 为例）
-- 短脉冲：500 ± 100 µs（允许 ±20%）
-- 长脉冲：1000 ± 200 µs（允许 ±20%）
-
-### 判位规则
-- 比较每个数据位内高低电平的持续时间
-- 计算比值 = 高电平时间 / 低电平时间
-- 若比值 < 1/1.2 ≈ 0.833 → Bit 0
-- 否则 → Bit 1
-
-## 文件说明
-
-- **DigitalMeasurement.py**: 核心分析逻辑
-  - 同步识别算法
-  - Tosc 测量
-  - 数据位解码
-  
-- **SIF_Analyzer.py**: 高级分析器框架（可选扩展）
-
-- **extension.json**: Saleae Logic 扩展配置
-
-## 调试与验证
-
-### 查看原始数据
-1. 在 Saleae Logic 中查看采样数据
-2. 观察脉冲宽度（用户可查看时间标签）
-3. 验证脉冲序列是否符合协议
-
-### 检查测量结果
-分析完成后，查看测量窗口中的指标：
-- **SYNC**: 确认找到了同步信号
-- **Tosc**: 验证测量到的时间单位是否合理
-- **BITS**: 查看解码的比特流
-- **ERR**: 检查是否有异常
-
-## 协议详情
+## 📖 协议详情
 
 详见 [SIF_protocol_summary.md](SIF_protocol_summary.md)
 
