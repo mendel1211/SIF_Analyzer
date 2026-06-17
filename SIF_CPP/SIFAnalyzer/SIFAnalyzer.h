@@ -14,7 +14,7 @@ class SIFAnalyzer;
 // 协议常量 (MD 协议摘要 + MCU 帧结束)
 // ---------------------------------------------------------------------------
 const double SYNC_LOW_MIN_SEC  = 0.008;   // 同步低 ≥ 8ms
-const double END_SIGNAL_SEC    = 0.002;   // 帧结束 ≥ 2ms (MCU)
+const double END_SIGNAL_SEC    = 0.01;   // 帧结束 ≥ 10ms (MCU)
 const double MIN_PULSE_SEC     = 0.00008; // 最小有效脉冲 80µs (过滤毛刺)
 const U32   TOSC_UNITS_SHORT   = 32;      // 短脉冲 Tosc 单位
 
